@@ -151,12 +151,38 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onBackPressed() {
         WebView webView = getBridge().getWebView();
-        if (webView != null && webView.canGoBack()) {
-            // 如果 WebView 有历史记录，返回上一页
-            webView.goBack();
+        if (webView != null) {
+            // 通过 JavaScript 直接关闭播放页面（包括退出全屏）
+            webView.evaluateJavascript(
+                "(function() {" +
+                "  if (window.vueApp && window.vueApp.showDetail) {" +
+                "    // 如果在全屏，先退出全屏" +
+                "    if (window.vueApp.dp && window.vueApp.dp.fullScreen) {" +
+                "      try { window.vueApp.dp.fullScreen.cancel('web'); } catch(e) {}" +
+                "    }" +
+                "    // 关闭播放页面" +
+                "    window.vueApp.closeDetail();" +
+                "    return 'closed';" +
+                "  }" +
+                "  return 'none';" +
+                "})()",
+                result -> {
+                    // 如果 JavaScript 返回 'none'，说明不在播放页面
+                    if (result != null && result.contains("none")) {
+                        // 检查 WebView 历史记录
+                        if (webView.canGoBack()) {
+                            webView.goBack();
+                        } else {
+                            // 退出应用
+                            MainActivity.super.onBackPressed();
+                        }
+                    }
+                    // 'closed' 表示播放页面已关闭，不需要额外操作
+                }
+            );
         } else {
-            // 否则使用默认行为（退出应用）
             super.onBackPressed();
         }
     }
 }
+

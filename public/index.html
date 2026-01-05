@@ -3338,6 +3338,20 @@
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
                     watchHistory: [],  // 用户观看历史记录
+
+                    // 📺 TV 模式检测 - 通过 User Agent 或屏幕尺寸判断
+                    isTVMode: (function () {
+                        const ua = navigator.userAgent.toLowerCase();
+                        // 检测常见 TV 设备 User Agent 标识
+                        const tvKeywords = ['tv', 'android tv', 'googletv', 'aftt', 'aftm', 'aftb', 'firetv', 'chromecast', 'roku', 'smarttv', 'tizen', 'webos', 'leanback'];
+                        const isTVUA = tvKeywords.some(k => ua.includes(k));
+                        // 或者检测大屏幕 + 非触摸设备
+                        const isBigScreen = window.screen.width >= 1280 && window.screen.height >= 720;
+                        const isNoTouch = !('ontouchstart' in window);
+                        // 或者检测 GeckoView (TV 版专用)
+                        const isGecko = ua.includes('gecko/') && ua.includes('firefox/');
+                        return isTVUA || (isBigScreen && isNoTouch && isGecko);
+                    })(),
                     historyExpanded: false,  // 观看历史展开状态
                     historyCanScrollLeft: false,  // 可以向左滚动
                     historyCanScrollRight: false,  // 可以向右滚动
@@ -3408,6 +3422,13 @@
             async mounted() {
                 console.log('[VERSION] DongguaTV Code Version: 2024-12-19-v2 (showMovieInfo exists)');
                 console.log('[VERSION] Methods available:', Object.keys(this.$options.methods || {}).join(', '));
+
+                // 📺 TV 模式日志
+                if (this.isTVMode) {
+                    console.log('[TV 模式] ✅ 已激活 TV 模式 - 自动全屏播放');
+                } else {
+                    console.log('[TV 模式] ℹ️ 普通模式 - 标准播放体验');
+                }
 
                 // 性能优化：使用 passive 滚动监听 + 节流
                 let scrollTicking = false;
@@ -3480,8 +3501,14 @@
                             break;
                         case 'Escape':     // 返回键
                         case 'Backspace':  // 某些遥控器的返回键
-                            if (this.showDetail) {
-                                e.preventDefault();
+                            e.preventDefault();
+                            // 如果在全屏状态，先退出全屏
+                            if (this.dp && this.dp.fullScreen && this.dp.fullScreen.isWebFullScreen) {
+                                console.log('[TV 模式] 退出网页全屏');
+                                this.dp.fullScreen.cancel('web');
+                            } else if (this.showDetail) {
+                                // 否则关闭播放页面
+                                console.log('[TV 模式] 关闭播放页面');
                                 this.closeDetail();
                             }
                             break;
@@ -6220,6 +6247,21 @@
                         console.log('[进度记忆-切换] canplay 监听器已添加');
                     }
                     dp.play();
+
+                    // 📺 TV 模式：自动进入全屏
+                    if (this.isTVMode) {
+                        console.log('[TV 模式] 检测到 TV 设备，自动进入全屏');
+                        setTimeout(() => {
+                            try {
+                                // 尝试进入全屏
+                                if (dp.fullScreen) {
+                                    dp.fullScreen.request('web');  // 网页全屏
+                                }
+                            } catch (e) {
+                                console.log('[TV 模式] 全屏失败:', e);
+                            }
+                        }, 500);
+                    }
                 },
 
                 // 处理播放错误，自动切换线路
